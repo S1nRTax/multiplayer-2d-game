@@ -12,6 +12,10 @@ const app = express(); // creates an Express application instance
 const server = createServer(app); // creates an HTTP server, and passing the app to it.
 const wss = new WebSocketServer({ server }); // here we create a web socket server on my existing HTTP server, so using the same port.
 
+const SERVER_FPS = 30;
+let eventQueue = [];
+
+
 app.use(express.static(join(__dirname, 'public'))); // tells the server to server static files from Public directory. 
 
 // this gonna map players with socket  =>   player <=> socket
@@ -22,26 +26,51 @@ let idCounter = 0;
 wss.on('connection', ws => { // so this will listen for new WebSocket connections, when someones connects via ws it runs this fnc
 	// here i just create the actual player.
 	const id = idCounter++;
+	const xPos = Math.random()*WORLD_WIDTH;
+	const yPos = Math.random()*WORLD_HEIGHT;
 	const player = {
+		ws,
 		id,
-		xPos: Math.random()*WORLD_WIDTH,
-		yPos: Math.random()*WORLD_HEIGHT,
+		xPos,
+		yPos,
 	}
-	players.set(ws, player);
+        players.set(id, player);
 	console.log(`Player ${id} connected!`);
-	ws.send(JSON.stringify({
-		kind: "Hello",
-		id,
-	}));
- 
+        eventQueue.push({
+             kind: 'PlayerJoined',
+             id,
+	     xPos,
+	     yPos,
+	});   
 
-
-    // Handle individual client disconnection
+// Handle individual client disconnection
     ws.on('close', () => {
         players.delete(id); // remove the player from the map
         console.log(`Player ${id} disconnected`);
     });
 });
+
+
+function tick(){
+ for(let event of eventQueue){
+    switch(event.kind){
+	 case 'PlayerJoined':
+	    const player = players.get(event.id);
+	    if(player === undefined) continue;
+	    player.ws.send(JSON.stringify({
+		kind: "Hello",
+		id: player.id,
+        }));
+       break;
+   }
+}	
+ eventQueue.length = 0;
+ setTimeout(tick, 1000/SERVER_FPS);	
+}
+
+setTimeout(tick, 1000/SERVER_FPS);
+
+
 
 const PORT = 6969; // set a port 
 server.listen(PORT, () => { // start the server listening on the port.
